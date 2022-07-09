@@ -1,270 +1,264 @@
-import { stringify } from "https://deno.land/std@0.97.0/encoding/yaml.ts";
-import { green } from "https://deno.land/std@0.97.0/fmt/colors.ts";
+import { stringify } from 'https://deno.land/std@0.97.0/encoding/yaml.ts';
+import { green } from 'https://deno.land/std@0.97.0/fmt/colors.ts';
+
+import {
+	globExpand,
+	GlobString,
+	parseGlob,
+} from 'https://deno.land/x/dxx@v0.0.13/src/lib/xArgs.ts';
+
+function isGlob(s: string) {
+	return parseGlob(s).glob.length > 0;
+}
 
 export class AppError extends Error {}
 
 class FilePattern {
-  constructor(public path: string, public patterns: string[]) {}
+	constructor(public path: string, public patterns: string[]) {}
 
-  async validate(v: string) {
-    let text: string;
-    try {
-      text = await Deno.readTextFile(this.path);
-    } catch (e) {
-      if (e.name === "NotFound") {
-        throw new AppError(`Error: The file ${this.path} not found`);
-      }
-      throw e;
-    }
-    for (const pattern of this.patterns) {
-      if (!pattern.includes("%.%.%")) {
-        throw new AppError(
-          `Error: The pattern '${pattern}' doesn't include '%.%.%'`,
-        );
-      }
-      const findPattern = pattern.replaceAll("%.%.%", v);
-      if (!text.includes(findPattern)) {
-        throw new AppError(
-          `Error: The file '${this.path}' doesn't include the pattern '${findPattern}'`,
-        );
-      }
-    }
-  }
+	async validate(v: string) {
+		const paths = isGlob(this.path) ? await globExpand(this.path as GlobString) : [this.path];
+		const promises = await Promise.all(paths.map(async (path) => {
+			let text: string;
+			try {
+				text = await Deno.readTextFile(path);
+			} catch (e) {
+				if (e.name === 'NotFound') {
+					throw new AppError(`Error: The file ${this.path} not found`);
+				}
+				throw e;
+			}
+			for (const pattern of this.patterns) {
+				if (!pattern.includes('%.%.%')) {
+					throw new AppError(`Error: The pattern '${pattern}' doesn't include '%.%.%'`);
+				}
+				// const findPattern = pattern.replaceAll('%.%.%', v);
+				// if (!text.includes(findPattern)) {
+				// 	Promise.reject(
+				// 		new AppError(`Error: The file '${path}' doesn't include the pattern '${findPattern}'`),
+				// 	);
+				// }
+			}
+		}));
+	}
 
-  async replace(from: string, to: string) {
-    let contents = await Deno.readTextFile(this.path);
-    for (const pattern of this.patterns) {
-      const beforeString = pattern.replaceAll("%.%.%", from);
-      const afterString = pattern.replaceAll("%.%.%", to);
-      contents = contents.replaceAll(beforeString, afterString);
-    }
-    await Deno.writeTextFile(this.path, contents);
-  }
+	async replace(from: string, to: string) {
+		const paths = await globExpand(this.path as GlobString);
+		await Promise.all(paths.map(async (path) => {
+			let contents = await Deno.readTextFile(path);
+			for (const pattern of this.patterns) {
+				const beforeString = pattern.replaceAll('%.%.%', from);
+				const afterString = pattern.replaceAll('%.%.%', to);
+				contents = contents.replaceAll(beforeString, afterString);
+			}
+			await Deno.writeTextFile(this.path, contents);
+		}));
+	}
 }
 
 export class Version {
-  static parse(v: string) {
-    // TODO(kt3k): Implement more strict parse rules.
-    const m = v.match(/(\d+).(\d+).(\d+)(-(.+))?/);
-    if (!m) {
-      throw new AppError(`Error: Invalid version number: ${v}`);
-    }
-    return new Version(+m[1]!, +m[2]!, +m[3]!, m[5]);
-  }
+	static parse(v: string) {
+		// TODO(kt3k): Implement more strict parse rules.
+		const m = v.match(/(\d+).(\d+).(\d+)(-(.+))?/);
+		if (!m) {
+			throw new AppError(`Error: Invalid version number: ${v}`);
+		}
+		return new Version(+m[1]!, +m[2]!, +m[3]!, m[5]);
+	}
 
-  constructor(
-    public major: number,
-    public minor: number,
-    public patch: number,
-    public preid: string | undefined,
-  ) {
-  }
+	constructor(
+		public major: number,
+		public minor: number,
+		public patch: number,
+		public preid: string | undefined,
+	) {
+	}
 
-  bumpMajor(): Version {
-    return new Version(this.major + 1, 0, 0, undefined);
-  }
+	bumpMajor(): Version {
+		return new Version(this.major + 1, 0, 0, undefined);
+	}
 
-  bumpMinor(): Version {
-    return new Version(this.major, this.minor + 1, 0, undefined);
-  }
+	bumpMinor(): Version {
+		return new Version(this.major, this.minor + 1, 0, undefined);
+	}
 
-  bumpPatch(): Version {
-    return new Version(this.major, this.minor, this.patch + 1, undefined);
-  }
+	bumpPatch(): Version {
+		return new Version(this.major, this.minor, this.patch + 1, undefined);
+	}
 
-  setPreid(preid: string): Version {
-    return new Version(this.major, this.minor, this.patch, preid);
-  }
+	setPreid(preid: string): Version {
+		return new Version(this.major, this.minor, this.patch, preid);
+	}
 
-  release(): Version {
-    return new Version(this.major, this.minor, this.patch, undefined);
-  }
+	release(): Version {
+		return new Version(this.major, this.minor, this.patch, undefined);
+	}
 
-  toString() {
-    const { major, minor, patch, preid } = this;
-    if (preid) {
-      return `${major}.${minor}.${patch}-${preid}`;
-    }
-    return `${major}.${minor}.${patch}`;
-  }
+	toString() {
+		const { major, minor, patch, preid } = this;
+		if (preid) {
+			return `${major}.${minor}.${patch}-${preid}`;
+		}
+		return `${major}.${minor}.${patch}`;
+	}
 }
 
 export type VersionInfoInput = {
-  version?: string;
-  commit?: string;
-  files?: Record<string, Array<string> | string>;
+	version?: string;
+	commit?: string;
+	files?: Record<string, Array<string> | string>;
 };
 
 export class VersionInfo {
-  static createDefault() {
-    return VersionInfo.create({
-      version: "0.0.0",
-      commit: "chore: bump to v%.%.%",
-      files: { "README.md": "v%.%.%" },
-    });
-  }
-  static create(
-    { version, commit, files }: VersionInfoInput,
-    path: string = ".bmp.yml",
-  ) {
-    if (!version) {
-      throw new AppError(
-        "Error: version property is not given in the config file",
-      );
-    }
-    if (!files) {
-      throw new AppError(
-        "Error: files property is not given in the config file",
-      );
-    }
-    const v = Version.parse(version);
-    const filePatterns: FilePattern[] = [];
-    for (const [path, value] of Object.entries(files)) {
-      const patterns: string[] = [];
-      if (typeof value === "string") {
-        patterns.push(value);
-      } else if (Array.isArray(value)) {
-        for (const val of value) {
-          if (typeof val === "string") {
-            patterns.push(val);
-          } else {
-            throw new Error(
-              `Error: Wrong type for file pattern: ${typeof val} (${val}) is given`,
-            );
-          }
-        }
-      } else {
-        throw new Error(
-          `Error: Wrong type for file pattern: ${typeof value} (${value}) is given`,
-        );
-      }
-      filePatterns.push(new FilePattern(path, patterns));
-    }
-    return new VersionInfo(path, v, commit, filePatterns);
-  }
+	static createDefault() {
+		return VersionInfo.create({
+			version: '0.0.0',
+			commit: 'chore: bump to v%.%.%',
+			files: { 'README.md': 'v%.%.%' },
+		});
+	}
+	static create({ version, commit, files }: VersionInfoInput, path: string = '.bmp.yml') {
+		if (!version) {
+			throw new AppError('Error: version property is not given in the config file');
+		}
+		if (!files) {
+			throw new AppError('Error: files property is not given in the config file');
+		}
+		const v = Version.parse(version);
+		const filePatterns: FilePattern[] = [];
+		for (const [path, value] of Object.entries(files)) {
+			const patterns: string[] = [];
+			if (typeof value === 'string') {
+				patterns.push(value);
+			} else if (Array.isArray(value)) {
+				for (const val of value) {
+					if (typeof val === 'string') {
+						patterns.push(val);
+					} else {
+						throw new Error(`Error: Wrong type for file pattern: ${typeof val} (${val}) is given`);
+					}
+				}
+			} else {
+				throw new Error(`Error: Wrong type for file pattern: ${typeof value} (${value}) is given`);
+			}
+			filePatterns.push(new FilePattern(path, patterns));
+		}
+		return new VersionInfo(path, v, commit, filePatterns);
+	}
 
-  updateVersion: Version;
-  constructor(
-    public path: string,
-    public currentVersion: Version,
-    public commit: string | undefined,
-    public filePatterns: FilePattern[],
-  ) {
-    this.updateVersion = currentVersion;
-  }
+	updateVersion: Version;
+	constructor(
+		public path: string,
+		public currentVersion: Version,
+		public commit: string | undefined,
+		public filePatterns: FilePattern[],
+	) {
+		this.updateVersion = currentVersion;
+	}
 
-  async validate() {
-    const v = this.currentVersion.toString();
-    for (const filePattern of this.filePatterns) {
-      await filePattern.validate(v);
-    }
-  }
+	async validate() {
+		const v = this.currentVersion.toString();
+		for (const filePattern of this.filePatterns) {
+			await filePattern.validate(v);
+		}
+	}
 
-  major() {
-    this.updateVersion = this.currentVersion.bumpMajor();
-  }
+	major() {
+		this.updateVersion = this.currentVersion.bumpMajor();
+	}
 
-  minor() {
-    this.updateVersion = this.currentVersion.bumpMinor();
-  }
+	minor() {
+		this.updateVersion = this.currentVersion.bumpMinor();
+	}
 
-  patch() {
-    this.updateVersion = this.currentVersion.bumpPatch();
-  }
+	patch() {
+		this.updateVersion = this.currentVersion.bumpPatch();
+	}
 
-  preid(preid: string) {
-    this.updateVersion = this.currentVersion.setPreid(preid);
-  }
+	preid(preid: string) {
+		this.updateVersion = this.currentVersion.setPreid(preid);
+	}
 
-  release() {
-    this.updateVersion = this.currentVersion.release();
-  }
+	release() {
+		this.updateVersion = this.currentVersion.release();
+	}
 
-  toObject() {
-    const data = { version: this.updateVersion.toString() } as any;
-    if (this.commit) {
-      data.commit = this.commit;
-    }
-    const files: Record<string, string | string[]> = {};
-    for (const { path, patterns } of this.filePatterns) {
-      if (patterns.length === 1) {
-        files[path] = patterns[0];
-      } else {
-        files[path] = patterns;
-      }
-    }
-    data.files = files;
-    return data;
-  }
+	toObject() {
+		const data = { version: this.updateVersion.toString() } as any;
+		if (this.commit) {
+			data.commit = this.commit;
+		}
+		const files: Record<string, string | string[]> = {};
+		for (const { path, patterns } of this.filePatterns) {
+			if (patterns.length === 1) {
+				files[path] = patterns[0];
+			} else {
+				files[path] = patterns;
+			}
+		}
+		data.files = files;
+		return data;
+	}
 
-  toString() {
-    const buf: string[] = [];
-    buf.push(`Current version: ${green(this.currentVersion.toString())}`);
-    if (this.commit) {
-      buf.push(`Commit message: ${green(this.getCommitMessage())}`);
-    }
-    buf.push(`Version patterns:`);
-    for (const { path, patterns } of this.filePatterns) {
-      for (const pattern of patterns) {
-        buf.push(
-          `  ${path}: ${
-            green(pattern.replaceAll("%.%.%", this.updateVersion.toString()))
-          }`,
-        );
-      }
-    }
-    return buf.join("\n");
-  }
+	toString() {
+		const buf: string[] = [];
+		buf.push(`Current version: ${green(this.currentVersion.toString())}`);
+		if (this.commit) {
+			buf.push(`Commit message: ${green(this.getCommitMessage())}`);
+		}
+		buf.push(`Version patterns:`);
+		for (const { path, patterns } of this.filePatterns) {
+			for (const pattern of patterns) {
+				buf.push(`  ${path}: ${green(pattern.replaceAll('%.%.%', this.updateVersion.toString()))}`);
+			}
+		}
+		return buf.join('\n');
+	}
 
-  bumpSummary() {
-    const buf: string[] = [];
-    const v0 = this.currentVersion.toString();
-    const v1 = this.updateVersion.toString();
-    buf.push("Updating version:");
-    buf.push("  " + green(`${v0} => ${v1}`));
-    buf.push("Version patterns:");
-    for (const { path, patterns } of this.filePatterns) {
-      for (const pattern of patterns) {
-        buf.push(
-          `  ${path}: ${
-            green(
-              `${pattern.replaceAll("%.%.%", v0)} => ${
-                pattern.replaceAll("%.%.%", v1)
-              }`,
-            )
-          }`,
-        );
-      }
-    }
-    return buf.join("\n");
-  }
+	bumpSummary() {
+		const buf: string[] = [];
+		const v0 = this.currentVersion.toString();
+		const v1 = this.updateVersion.toString();
+		buf.push('Updating version:');
+		buf.push('  ' + green(`${v0} => ${v1}`));
+		buf.push('Version patterns:');
+		for (const { path, patterns } of this.filePatterns) {
+			for (const pattern of patterns) {
+				buf.push(
+					`  ${path}: ${
+						green(`${pattern.replaceAll('%.%.%', v0)} => ${
+							pattern.replaceAll('%.%.%', v1)
+						}`)
+					}`,
+				);
+			}
+		}
+		return buf.join('\n');
+	}
 
-  isUpdated() {
-    return this.currentVersion.toString() !== this.updateVersion.toString();
-  }
+	isUpdated() {
+		return this.currentVersion.toString() !== this.updateVersion.toString();
+	}
 
-  async performUpdate() {
-    for (const filePattern of this.filePatterns) {
-      await filePattern.replace(
-        this.currentVersion.toString(),
-        this.updateVersion.toString(),
-      );
-    }
-    await this.save();
-  }
+	async performUpdate() {
+		for (const filePattern of this.filePatterns) {
+			await filePattern.replace(this.currentVersion.toString(), this.updateVersion.toString());
+		}
+		await this.save();
+	}
 
-  async save() {
-    await Deno.writeTextFile(this.path, stringify(this.toObject()));
-  }
+	async save() {
+		await Deno.writeTextFile(this.path, stringify(this.toObject()));
+	}
 
-  getTag() {
-    return `v${this.updateVersion.toString()}`;
-  }
+	getTag() {
+		return `v${this.updateVersion.toString()}`;
+	}
 
-  getCommitMessage() {
-    if (this.commit) {
-      return this.commit.replaceAll("%.%.%", this.updateVersion.toString());
-    }
-    return `chore: bump to ${this.updateVersion.toString()}`;
-  }
+	getCommitMessage() {
+		if (this.commit) {
+			return this.commit.replaceAll('%.%.%', this.updateVersion.toString());
+		}
+		return `chore: bump to ${this.updateVersion.toString()}`;
+	}
 }
