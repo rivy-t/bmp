@@ -1,9 +1,9 @@
+import { green } from "https://deno.land/std@0.97.0/fmt/colors.ts";
 import {
   assert,
   assertEquals,
   assertThrowsAsync,
 } from "https://deno.land/std@0.97.0/testing/asserts.ts";
-import { green } from "https://deno.land/std@0.97.0/fmt/colors.ts";
 
 import { AppError, Version, VersionInfo } from "./models.ts";
 
@@ -64,18 +64,12 @@ Deno.test("VersionInfo - toObject", async () => {
   const info = VersionInfo.create({
     version: "1.2.3",
     commit: "chore: bump to %.%.%",
-    files: {
-      "README.md": ["v%.%.%", "@%.%.%"],
-      "main.ts": [`"%.%.%"`],
-    }
+    files: { "README.md": ["v%.%.%", "@%.%.%"], "main.ts": [`"%.%.%"`] },
   });
   assertEquals(info.toObject(), {
     version: "1.2.3",
-    commit: 'chore: bump to %.%.%',
-    files: {
-      "README.md": ["v%.%.%", '@%.%.%'],
-      "main.ts": '"%.%.%"'
-    }
+    commit: "chore: bump to %.%.%",
+    files: { "README.md": ["v%.%.%", "@%.%.%"], "main.ts": '"%.%.%"' },
   });
 });
 
@@ -83,10 +77,7 @@ Deno.test("VersionInfo.isUpdated()", async () => {
   const info = VersionInfo.create({
     version: "1.2.3",
     commit: "chore: bump to %.%.%",
-    files: {
-      "README.md": ["v%.%.%", "@%.%.%"],
-      "main.ts": [`"%.%.%"`],
-    }
+    files: { "README.md": ["v%.%.%", "@%.%.%"], "main.ts": [`"%.%.%"`] },
   });
   assert(!info.isUpdated());
   info.major();
@@ -97,66 +88,61 @@ Deno.test("VersionInfo.toString()", async () => {
   const info = VersionInfo.create({
     version: "1.2.3",
     commit: "chore: bump to %.%.%",
-    files: {
-      "README.md": ["v%.%.%", "@%.%.%"],
-      "main.ts": [`"%.%.%"`],
-    }
+    files: { "README.md": ["v%.%.%", "@%.%.%"], "main.ts": [`"%.%.%"`] },
   });
-  assertEquals(info.toString().trim(), `
+  assertEquals(
+    info.toString().trim(),
+    `
 Current version: ${green("1.2.3")}
 Commit message: ${green("chore: bump to 1.2.3")}
 Version patterns:
   README.md: ${green("v1.2.3")}
   README.md: ${green("@1.2.3")}
   main.ts: ${green('"1.2.3"')}
-`.trim());
+`
+      .trim(),
+  );
 });
 
 Deno.test("VersionInfo.getTag()", async () => {
   const info = VersionInfo.create({
     version: "1.2.3",
     commit: "chore: bump to %.%.%",
-    files: {
-      "README.md": ["v%.%.%", "@%.%.%"],
-      "main.ts": [`"%.%.%"`],
-    }
+    files: { "README.md": ["v%.%.%", "@%.%.%"], "main.ts": [`"%.%.%"`] },
   });
 
-  assertEquals(info.getTag(), "v1.2.3")
+  assertEquals(info.getTag(), "v1.2.3");
 });
 
 Deno.test("VersionInfo.getCommitMessage()", async () => {
   const info = VersionInfo.create({
     version: "1.2.3",
     commit: "chore: hey %.%.%",
-    files: {
-      "README.md": ["v%.%.%", "@%.%.%"],
-      "main.ts": [`"%.%.%"`],
-    }
+    files: { "README.md": ["v%.%.%", "@%.%.%"], "main.ts": [`"%.%.%"`] },
   });
 
-  assertEquals(info.getCommitMessage(), "chore: hey 1.2.3")
+  assertEquals(info.getCommitMessage(), "chore: hey 1.2.3");
 });
-
 
 Deno.test("VersionInfo.bumpSummary()", async () => {
   const info = VersionInfo.create({
     version: "1.2.3",
     commit: "chore: hey %.%.%",
-    files: {
-      "README.md": ["v%.%.%", "@%.%.%"],
-      "main.ts": [`"%.%.%"`],
-    }
+    files: { "README.md": ["v%.%.%", "@%.%.%"], "main.ts": [`"%.%.%"`] },
   });
 
   info.minor();
 
-  assertEquals(info.bumpSummary(), `
+  assertEquals(
+    info.bumpSummary(),
+    `
 Updating version:
   ${green("1.2.3 => 1.3.0")}
 Version patterns:
   README.md: ${green("v1.2.3 => v1.3.0")}
   README.md: ${green("@1.2.3 => @1.3.0")}
   main.ts: ${green('"1.2.3" => "1.3.0"')}
-  `.trim());
+  `
+      .trim(),
+  );
 });

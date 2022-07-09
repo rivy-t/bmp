@@ -5,9 +5,7 @@ import {
 
 import { AppError, VersionInfo, VersionInfoInput } from "./models.ts";
 
-type ReadConfigOptions = {
-  file?: string;
-};
+type ReadConfigOptions = { file?: string };
 
 export async function readConfig(
   opts: ReadConfigOptions = {},
